@@ -1,0 +1,325 @@
+---
+title: "HR Analytics"
+author: "Ishwarya keerthivasan"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# **Comprehensive HR Analytics Portfolio: HR Employee Attrition Analysis**
+
+## **1. Data Understanding and Preprocessing**
+
+### **Load Libraries**
+```{r}
+# Load required libraries
+library(tidyverse) # Data manipulation and visualization
+library(caret)     # For machine learning workflows
+library(randomForest) # Random forest model
+library(ggplot2)   # Advanced visualizations
+library(DataExplorer) # Automated EDA
+library(plotly)    # Interactive visualizations
+```
+
+### **Load the Dataset**
+```{r}
+# Load the dataset
+data <- read.csv("HR-Employee-Attrition.csv")
+
+# Inspect the dataset
+head(data)
+summary(data)
+str(data)
+```
+
+### **Data Cleaning**
+```{r}
+# Check for missing values
+sum(is.na(data))
+
+# Handle missing values if any
+data <- data %>% drop_na()
+
+# Remove duplicates
+data <- data[!duplicated(data), ]
+
+# Remove zero-variance columns
+zero_variance <- sapply(data, function(x) length(unique(x)) == 1)
+data <- data[, !zero_variance]
+
+# Convert categorical variables to factors
+data <- data %>% mutate_if(is.character, as.factor)
+
+# Inspect changes
+str(data)
+```
+
+---
+
+## **2. Exploratory Data Analysis (EDA)**
+
+### **Basic EDA**
+```{r}
+# Automated EDA
+DataExplorer::create_report(data, output_file = "EDA_Report.html")
+```
+
+### **Univariate Analysis**
+```{r}
+# Attrition distribution
+attrition_plot <- ggplot(data, aes(x = Attrition)) + 
+  geom_bar(fill = "steelblue") + 
+  ggtitle("Attrition Distribution")
+plotly::ggplotly(attrition_plot)
+
+# Age distribution
+age_plot <- ggplot(data, aes(x = Age)) + 
+  geom_histogram(binwidth = 5, fill = "darkgreen", color = "white") + 
+  ggtitle("Age Distribution")
+plotly::ggplotly(age_plot)
+```
+
+### **Bivariate Analysis**
+```{r}
+# Attrition by Department
+attrition_dept <- ggplot(data, aes(x = Department, fill = Attrition)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Attrition by Department")
+plotly::ggplotly(attrition_dept)
+
+# Attrition and Overtime
+overtime_attrition <- ggplot(data, aes(x = OverTime, fill = Attrition)) + 
+  geom_bar(position = "dodge") + 
+  ggtitle("Attrition and Overtime")
+plotly::ggplotly(overtime_attrition)
+```
+
+### **Correlation Analysis**
+```{r}
+# Compute correlation matrix
+numeric_data <- data %>% select_if(is.numeric)
+corr_matrix <- cor(numeric_data)
+
+# Melt the correlation matrix for ggplot
+melted_corr <- melt(corr_matrix)
+
+# Create the heatmap
+heatmap_plot <- ggplot(data = melted_corr, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") + # Adds white gridlines between tiles
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), 
+                       name = "Correlation") +
+  theme_minimal() + # Minimal theme for better visualization
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), # Rotates x-axis labels
+        axis.text.y = element_text(size = 10)) + # Adjusts y-axis text size
+  labs(title = "Correlation Heatmap", x = "Features", y = "Features")
+
+# Display the plot
+heatmap_plot
+```
+
+---
+
+## **3. Statistical Analysis**
+
+### **Hypothesis Testing**
+```{r}
+# Chi-squared test for Attrition and Department
+chisq.test(table(data$Attrition, data$Department))
+
+# ANOVA for Attrition and Age
+aov_result <- aov(Age ~ Attrition, data = data)
+summary(aov_result)
+```
+
+---
+
+## **4. Predictive Modeling**
+
+### **Data Preparation**
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+trainIndex <- createDataPartition(data$Attrition, p = 0.8, list = FALSE)
+train <- data[trainIndex, ]
+test <- data[-trainIndex, ]
+
+# Feature scaling
+preProc <- preProcess(train, method = c("center", "scale"))
+train <- predict(preProc, train)
+test <- predict(preProc, test)
+```
+
+### **Logistic Regression**
+```{r}
+# Build logistic regression model
+log_model <- glm(Attrition ~ ., data = train, family = binomial)
+summary(log_model)
+
+# Predictions
+log_pred <- predict(log_model, test, type = "response")
+log_class <- ifelse(log_pred > 0.5, "Yes", "No")
+```
+
+### **Random Forest**
+```{r}
+# Build Random Forest model
+rf_model <- randomForest(Attrition ~ ., data = train, ntree = 100)
+print(rf_model)
+
+# Feature Importance
+importance(rf_model)
+varImpPlot(rf_model)
+
+# Predictions
+rf_pred <- predict(rf_model, test)
+```
+
+### **Model Evaluation**
+```{r}
+# Confusion Matrix for Logistic Regression
+confusionMatrix(as.factor(log_class), as.factor(test$Attrition))
+
+# Confusion Matrix for Random Forest
+confusionMatrix(as.factor(rf_pred), as.factor(test$Attrition))
+```
+
+---
+
+## **5. Business Recommendations**
+
+- **Key Findings**:
+  - High attrition rates are observed in departments with frequent overtime.
+  - Younger employees (ages 25-35) show a higher likelihood of leaving.
+
+- **Recommendations**:
+  - Introduce flexible working hours to reduce overtime pressure.
+  - Create targeted retention programs for younger employees.
+
+---
+
+## **6. Interactive Dashboard (Optional)**
+```{r}
+# Define the UI for the dashboard
+ui <- fluidPage(
+  titlePanel("HR Attrition Analysis Dashboard"),
+  
+  # Layout structure
+  fluidRow(
+    column(4, 
+           # Left panel for Key Insights
+           wellPanel(
+             h3("Key Insights"),
+             uiOutput("insights")  # Placeholder for dynamic insights
+           )
+    ),
+    column(4,
+           # Center panel for visualization
+           plotlyOutput("plot")
+    ),
+    column(4,
+           # Right panel for dropdown menu
+           selectInput("visualization", "Choose Visualization:", 
+                       choices = c("Age Distribution", "Income Distribution", "Job Satisfaction", "Outliers", "Attrition by Department", "Attrition by Overtime"))
+    )
+  )
+)
+
+# Define server logic
+server <- function(input, output, session) {
+  
+  # Dynamic Insights update based on selected visualization
+  observeEvent(input$visualization, {
+    insights_text <- switch(input$visualization,
+                            "Age Distribution" = c("Younger employees (ages 25-35) tend to have higher attrition rates.",
+                                                   "Attrition decreases as employees age, suggesting higher retention among older employees."),
+                            "Income Distribution" = c("Employees with lower income levels show higher attrition rates.",
+                                                      "Income disparity may contribute to dissatisfaction and higher turnover in lower-income brackets."),
+                            "Job Satisfaction" = c("Employees with lower job satisfaction scores are more likely to leave.",
+                                                   "Improving job satisfaction can significantly reduce attrition rates."),
+                            "Outliers" = c("Outliers in age or income indicate exceptional cases of either early departure or long-term retention.",
+                                          "Outliers may need further investigation to understand their reasons for staying or leaving."),
+                            "Attrition by Department" = c("Certain departments exhibit higher attrition rates, possibly due to workload or lack of resources.",
+                                                        "Departments with high stress or frequent overtime have significantly higher turnover."),
+                            "Attrition by Overtime" = c("Employees working overtime are at a higher risk of attrition.",
+                                                        "Reducing overtime in certain departments may help decrease attrition rates.",
+                                                        "Employees not working overtime tend to have a lower attrition rate.")
+    )
+    
+    output$insights <- renderUI({
+      tags$ul(lapply(insights_text, function(text) tags$li(text)))
+    })
+  })
+  
+  # Render dynamic plot based on selected visualization
+  output$plot <- renderPlotly({
+    if (input$visualization == "Age Distribution") {
+      # Age distribution plot
+      p <- ggplot(data, aes(x = Age)) + 
+        geom_histogram(binwidth = 5, fill = "lightblue", color = "white") + 
+        ggtitle("Age Distribution") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Age Distribution")
+      
+    } else if (input$visualization == "Income Distribution") {
+      # Income distribution plot
+      p <- ggplot(data, aes(x = MonthlyIncome)) + 
+        geom_histogram(binwidth = 1000, fill = "lightgreen", color = "white") + 
+        ggtitle("Income Distribution") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Income Distribution")
+      
+    } else if (input$visualization == "Job Satisfaction") {
+      # Job satisfaction by attrition
+      p <- ggplot(data, aes(x = JobSatisfaction, fill = Attrition)) + 
+        geom_bar(position = "dodge") + 
+        ggtitle("Job Satisfaction by Attrition") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Job Satisfaction by Attrition")
+      
+    } else if (input$visualization == "Outliers") {
+      # Outliers detection for age and income
+      outliers_age <- function(x) {
+        q1 <- quantile(x, 0.25)
+        q3 <- quantile(x, 0.75)
+        iqr <- q3 - q1
+        lower_bound <- q1 - 1.5 * iqr
+        upper_bound <- q3 + 1.5 * iqr
+        x[x < lower_bound | x > upper_bound]
+      }
+      
+      outliers_income <- outliers_age(data$MonthlyIncome)
+      outliers_age_vals <- outliers_age(data$Age)
+      
+      p <- ggplot(data, aes(x = Age)) + 
+        geom_histogram(binwidth = 5, fill = "lightblue", color = "white") + 
+        geom_point(data = data[data$Age %in% outliers_age_vals, ], aes(x = Age), color = "red", size = 2) +
+        ggtitle("Age Distribution with Outliers") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Age Distribution with Outliers")
+      
+    } else if (input$visualization == "Attrition by Department") {
+      # Attrition by department
+      p <- ggplot(data, aes(x = Department, fill = Attrition)) + 
+        geom_bar(position = "dodge") + 
+        ggtitle("Attrition by Department") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Attrition by Department")
+      
+    } else if (input$visualization == "Attrition by Overtime") {
+      # Attrition by overtime
+      p <- ggplot(data, aes(x = OverTime, fill = Attrition)) + 
+        geom_bar(position = "dodge") + 
+        ggtitle("Attrition and Overtime") +
+        theme_minimal()
+      ggplotly(p) %>% layout(title = "Attrition and Overtime")
+    }
+  })
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
